@@ -1,0 +1,23 @@
+<?php
+
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+function exigirLogin(): void
+{
+    if (!isset($_SESSION['usuario_id'])) {
+        header('Location: ../../login.php');
+        exit;
+    }
+}
+
+function exigirPerfil(array $perfis): void
+{
+    exigirLogin();
+
+    if (!in_array($_SESSION['tipo'], $perfis, true)) {
+        header('Location: ../../acesso_negado.php');
+        exit;
+    }
+}

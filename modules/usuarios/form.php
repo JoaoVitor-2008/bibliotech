@@ -1,3 +1,5 @@
+
+
 <?php
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../database/conexao.php';
@@ -5,12 +7,15 @@ require_once __DIR__ . '/../../database/conexao.php';
 exigirPerfil(['admin', 'professor']);
 
 $id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
+
 $usuario = [
     'nome' => '',
     'email' => '',
     'tipo' => 'aluno',
     'status' => 'ativo'
 ];
+
+$mensagem = '';
 
 if ($id) {
     $stmt = $pdo->prepare('SELECT * FROM usuarios WHERE id = :id');
@@ -19,23 +24,91 @@ if ($id) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+
     $nome = trim($_POST['nome'] ?? '');
     $email = trim($_POST['email'] ?? '');
     $tipo = $_POST['tipo'] ?? 'aluno';
     $status = $_POST['status'] ?? 'ativo';
     $senha = $_POST['senha'] ?? '';
 
-    if ($id) {
-        // TODO: validar dados e atualizar usuário.
-        // Dica: use UPDATE e prepared statement.
-        $mensagem = 'Modo edição inicializado. Implemente o UPDATE nesta aula.';
+    // Validar campos obrigatórios
+    if (empty($nome) || empty($email) || empty($senha) && !$id) {
+
+        $mensagem = 'Preencha todos os campos obrigatórios.';
+
+    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+
+        $mensagem = 'Digite um e-mail válido.';
+
+    } elseif (!in_array($tipo, ['aluno', 'professor', 'admin'], true)) {
+
+        $mensagem = 'Tipo de usuário inválido.';
+
+    } elseif (!in_array($status, ['ativo', 'bloqueado'], true)) {
+
+        $mensagem = 'Status inválido.';
+
     } else {
-        // TODO: validar dados e inserir usuário.
-        // Dica: use password_hash() para a senha.
-        $mensagem = 'Modo cadastro inicializado. Implemente o INSERT nesta aula.';
+
+        // Verificar se o e-mail já existe
+        $stmt = $pdo->prepare(
+            'SELECT id FROM usuarios WHERE email = :email'
+        );
+
+        $stmt->execute(['email' => $email]);
+
+        if ($stmt->fetch()) {
+
+            $mensagem = 'Este e-mail já está cadastrado.';
+
+        } else {
+
+            // Proteger a senha
+            $senhaHash = password_hash($senha, PASSWORD_DEFAULT);
+
+            // Cadastrar usuário
+            $sql = 'INSERT INTO usuarios
+                    (nome, email, senha, tipo, status)
+                    VALUES
+                    (:nome, :email, :senha, :tipo, :status)';
+
+            $stmt = $pdo->prepare($sql);
+
+            $resultado = $stmt->execute([
+                'nome' => $nome,
+                'email' => $email,
+                'senha' => $senhaHash,
+                'tipo' => $tipo,
+                'status' => $status
+            ]);
+
+            if ($resultado) {
+
+                $mensagem = 'Usuário cadastrado com sucesso!';
+
+                $usuario = [
+                    'nome' => '',
+                    'email' => '',
+                    'tipo' => 'aluno',
+                    'status' => 'ativo'
+                ];
+
+            } else {
+
+                $mensagem = 'Erro ao cadastrar usuário.';
+            }
+        }
+    }
+
+    if (!$id) {
+        $usuario['nome'] = $nome;
+        $usuario['email'] = $email;
+        $usuario['tipo'] = $tipo;
+        $usuario['status'] = $status;
     }
 }
 ?>
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -45,25 +118,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link rel="stylesheet" href="../../assets/css/style.css">
 </head>
 <body>
+
 <?php require_once __DIR__ . '/../../includes/header.php'; ?>
 
 <main class="container">
     <div class="card">
+
         <h1><?= $id ? 'Editar usuário' : 'Novo usuário' ?></h1>
 
         <?php if (!empty($mensagem)): ?>
-            <div class="alert"><?= htmlspecialchars($mensagem) ?></div>
+            <div class="alert">
+                <?= htmlspecialchars($mensagem) ?>
+            </div>
         <?php endif; ?>
 
         <form method="post">
+
             <label>Nome</label>
-            <input type="text" name="nome" value="<?= htmlspecialchars($usuario['nome']) ?>" required>
+            <input
+                type="text"
+                name="nome"
+                value="<?= htmlspecialchars($usuario['nome']) ?>"
+                required
+            >
 
             <label>E-mail</label>
-            <input type="email" name="email" value="<?= htmlspecialchars($usuario['email']) ?>" required>
+            <input
+                type="email"
+                name="email"
+                value="<?= htmlspecialchars($usuario['email']) ?>"
+                required
+            >
 
             <label>Senha <?= $id ? '(deixe vazia para não alterar)' : '' ?></label>
-            <input type="password" name="senha" <?= $id ? '' : 'required' ?>>
+            <input
+                type="password"
+                name="senha"
+                <?= $id ? '' : 'required' ?>
+            >
 
             <label>Tipo</label>
             <select name="tipo">
@@ -79,8 +171,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </select>
 
             <button type="submit">Salvar</button>
+
         </form>
     </div>
 </main>
+
 </body>
 </html>

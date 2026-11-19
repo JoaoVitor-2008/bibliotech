@@ -6,11 +6,11 @@ body {
     margin: 0;
     font-family: Arial, sans-serif;
     background: #f4f7f7;
-    color: #263333;
+    color: #2d264b;
 }
 
 .topbar {
-    background: #046f6f;
+    background: #2a2258;
     color: #fff;
     padding: 16px 5%;
     display: flex;
@@ -72,7 +72,7 @@ button {
 button,
 .button {
     display: inline-block;
-    background: #046f6f;
+    background: #2d235c;
     color: #fff;
     border: 0;
     padding: 11px 16px;

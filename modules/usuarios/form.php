@@ -32,7 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $senha = $_POST['senha'] ?? '';
 
     // Validar campos obrigatórios
-    if (empty($nome) || empty($email) || (!$id && empty($senha))) {
+    if (empty($nome) || empty($email) || empty($senha) && !$id) {
 
         $mensagem = 'Preencha todos os campos obrigatórios.';
 

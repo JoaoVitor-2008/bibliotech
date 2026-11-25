@@ -1,3 +1,4 @@
+
 <?php
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../database/conexao.php';
@@ -5,11 +6,32 @@ require_once __DIR__ . '/../../database/conexao.php';
 exigirLogin();
 
 $livros = $pdo->query('SELECT COUNT(*) FROM livros')->fetchColumn();
-$usuarios = $pdo->query('SELECT COUNT(*) FROM usuarios')->fetchColumn();
-$emprestimos = $pdo->query("SELECT COUNT(*) FROM emprestimos WHERE status = 'ativo'")->fetchColumn();
+
+// Contagem de usuários conforme o perfil
+if ($_SESSION['tipo'] === 'admin') {
+    // Administrador conta todos os usuários
+    $usuarios = $pdo->query('SELECT COUNT(*) FROM usuarios')->fetchColumn();
+
+} elseif ($_SESSION['tipo'] === 'professor') {
+    // Professor conta somente os alunos
+    $stmt = $pdo->prepare(
+        "SELECT COUNT(*) FROM usuarios WHERE tipo = :tipo"
+    );
+    $stmt->execute(['tipo' => 'aluno']);
+    $usuarios = $stmt->fetchColumn();
+
+} else {
+    // Aluno não precisa visualizar o card
+    $usuarios = 0;
+}
+
+$emprestimos = $pdo->query(
+    "SELECT COUNT(*) FROM emprestimos WHERE status = 'ativo'"
+)->fetchColumn();
 
 require_once __DIR__ . '/../../includes/header.php';
 ?>
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -19,14 +41,35 @@ require_once __DIR__ . '/../../includes/header.php';
     <link rel="stylesheet" href="../../assets/css/style.css">
 </head>
 <body>
+
 <main class="container">
+
     <h1>Olá, <?= htmlspecialchars($_SESSION['nome']) ?>!</h1>
-    <p>Perfil: <strong><?= htmlspecialchars($_SESSION['tipo']) ?></strong></p>
+
+    <p>
+        Perfil:
+        <strong><?= htmlspecialchars($_SESSION['tipo']) ?></strong>
+    </p>
 
     <section class="grid">
-        <div class="card"><h2>📚 Livros</h2><strong><?= $livros ?></strong></div>
-        <div class="card"><h2>👥 Usuários</h2><strong><?= $usuarios ?></strong></div>
-        <div class="card"><h2>📋 Empréstimos ativos</h2><strong><?= $emprestimos ?></strong></div>
+
+        <div class="card">
+            <h2>📚 Livros</h2>
+            <strong><?= $livros ?></strong>
+        </div>
+
+        <?php if ($_SESSION['tipo'] === 'admin' || $_SESSION['tipo'] === 'professor'): ?>
+            <div class="card">
+                <h2>👥 Usuários</h2>
+                <strong><?= $usuarios ?></strong>
+            </div>
+        <?php endif; ?>
+
+        <div class="card">
+            <h2>📋 Empréstimos ativos</h2>
+            <strong><?= $emprestimos ?></strong>
+        </div>
+
     </section>
 
     <div class="card">
@@ -38,7 +81,10 @@ require_once __DIR__ . '/../../includes/header.php';
             <li>Testar permissões dos três perfis.</li>
         </ul>
     </div>
+
 </main>
+
 <?php require_once __DIR__ . '/../../includes/footer.php'; ?>
+
 </body>
 </html>

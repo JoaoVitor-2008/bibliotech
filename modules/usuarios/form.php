@@ -5,9 +5,18 @@
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../database/conexao.php';
 
+// Somente administrador e professor podem acessar
 exigirPerfil(['admin', 'professor']);
 
+$perfil = $_SESSION['tipo'];
+
 $id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
+
+// Impedir ID inválido
+if (isset($_GET['id']) && (!$id || $id <= 0)) {
+    header('Location: ../../acesso_negado.php');
+    exit;
+}
 
 $usuario = [
     'nome' => '',
@@ -20,12 +29,23 @@ $mensagem = '';
 
 // Buscar usuário existente
 if ($id) {
-    $stmt = $pdo->prepare('SELECT * FROM usuarios WHERE id = :id');
+
+    $stmt = $pdo->prepare(
+        'SELECT * FROM usuarios WHERE id = :id'
+    );
+
     $stmt->execute(['id' => $id]);
+
     $resultado = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$resultado) {
         die('Usuário não encontrado.');
+    }
+
+    // Professor só pode editar alunos
+    if ($perfil === 'professor' && $resultado['tipo'] !== 'aluno') {
+        header('Location: ../../acesso_negado.php');
+        exit;
     }
 
     $usuario = $resultado;
@@ -36,7 +56,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $nome = trim($_POST['nome'] ?? '');
     $email = trim($_POST['email'] ?? '');
-    $tipo = $_POST['tipo'] ?? 'aluno';
+
+    // Professor só pode trabalhar com alunos
+    $tipo = ($perfil === 'professor')
+        ? 'aluno'
+        : ($_POST['tipo'] ?? 'aluno');
+
     $status = $_POST['status'] ?? 'ativo';
     $senha = $_POST['senha'] ?? '';
 
@@ -63,7 +88,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     } else {
 
-        // Verificar e-mail duplicado, ignorando o próprio usuário
+        // Verificar se o e-mail já existe
         $sql = 'SELECT id FROM usuarios WHERE email = :email';
 
         if ($id) {
@@ -88,10 +113,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if ($id) {
 
-                // Atualizar usuário
+                // UPDATE: editar usuário existente
                 if (!empty($senha)) {
 
-                    $senhaHash = password_hash($senha, PASSWORD_DEFAULT);
+                    $senhaHash = password_hash(
+                        $senha,
+                        PASSWORD_DEFAULT
+                    );
 
                     $sql = 'UPDATE usuarios SET
                             nome = :nome,
@@ -140,8 +168,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             } else {
 
-                // Cadastrar novo usuário
-                $senhaHash = password_hash($senha, PASSWORD_DEFAULT);
+                // CREATE: cadastrar novo usuário
+                $senhaHash = password_hash(
+                    $senha,
+                    PASSWORD_DEFAULT
+                );
 
                 $sql = 'INSERT INTO usuarios
                         (nome, email, senha, tipo, status)
@@ -170,8 +201,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    // Manter os dados no formulário após erro
-    if (!empty($mensagem) && $mensagem !== 'Usuário cadastrado com sucesso!') {
+    // Manter dados preenchidos quando houver erro
+    if (
+        $mensagem !== '' &&
+        $mensagem !== 'Usuário cadastrado com sucesso!'
+    ) {
         $usuario['nome'] = $nome;
         $usuario['email'] = $email;
         $usuario['tipo'] = $tipo;
@@ -182,17 +216,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= $id ? 'Editar' : 'Novo' ?> usuário</title>
     <link rel="stylesheet" href="../../assets/css/style.css">
 </head>
+
 <body>
 
 <?php require_once __DIR__ . '/../../includes/header.php'; ?>
 
 <main class="container">
+
     <div class="card">
 
         <h1><?= $id ? 'Editar usuário' : 'Novo usuário' ?></h1>
@@ -221,7 +258,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 required
             >
 
-            <label>Senha <?= $id ? '(deixe vazia para não alterar)' : '' ?></label>
+            <label>
+                Senha
+                <?= $id ? '(deixe vazia para não alterar)' : '' ?>
+            </label>
+
             <input
                 type="password"
                 name="senha"
@@ -229,23 +270,61 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             >
 
             <label>Tipo</label>
-            <select name="tipo">
-                <option value="aluno" <?= $usuario['tipo'] === 'aluno' ? 'selected' : '' ?>>Aluno</option>
-                <option value="professor" <?= $usuario['tipo'] === 'professor' ? 'selected' : '' ?>>Professor</option>
-                <option value="admin" <?= $usuario['tipo'] === 'admin' ? 'selected' : '' ?>>Administrador</option>
-            </select>
+
+            <?php if ($perfil === 'admin'): ?>
+
+                <select name="tipo">
+
+                    <option value="aluno"
+                        <?= $usuario['tipo'] === 'aluno' ? 'selected' : '' ?>>
+                        Aluno
+                    </option>
+
+                    <option value="professor"
+                        <?= $usuario['tipo'] === 'professor' ? 'selected' : '' ?>>
+                        Professor
+                    </option>
+
+                    <option value="admin"
+                        <?= $usuario['tipo'] === 'admin' ? 'selected' : '' ?>>
+                        Administrador
+                    </option>
+
+                </select>
+
+            <?php else: ?>
+
+                <input type="hidden" name="tipo" value="aluno">
+                <input type="text" value="Aluno" disabled>
+
+            <?php endif; ?>
 
             <label>Status</label>
+
             <select name="status">
-                <option value="ativo" <?= $usuario['status'] === 'ativo' ? 'selected' : '' ?>>Ativo</option>
-                <option value="bloqueado" <?= $usuario['status'] === 'bloqueado' ? 'selected' : '' ?>>Bloqueado</option>
+
+                <option value="ativo"
+                    <?= $usuario['status'] === 'ativo' ? 'selected' : '' ?>>
+                    Ativo
+                </option>
+
+                <option value="bloqueado"
+                    <?= $usuario['status'] === 'bloqueado' ? 'selected' : '' ?>>
+                    Bloqueado
+                </option>
+
             </select>
 
             <button type="submit">Salvar</button>
 
         </form>
+
     </div>
+
 </main>
+
+<?php require_once __DIR__ . '/../../includes/footer.php'; ?>
 
 </body>
 </html>
+

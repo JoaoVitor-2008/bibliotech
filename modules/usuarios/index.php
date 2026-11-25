@@ -3,17 +3,33 @@
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../database/conexao.php';
 
+// Somente administrador e professor podem acessar
 exigirPerfil(['admin', 'professor']);
 
-// Consultar usuários no banco de dados
-$sql = 'SELECT id, nome, email, tipo, status
-        FROM usuarios
-        ORDER BY nome';
+// Verificar o perfil do usuário logado
+if ($_SESSION['tipo'] === 'admin') {
 
-$stmt = $pdo->prepare($sql);
-$stmt->execute();
+    // Administrador visualiza todos os usuários
+    $sql = 'SELECT id, nome, email, tipo, status
+            FROM usuarios
+            ORDER BY nome';
 
-// Recuperar todos os usuários
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute();
+
+} else {
+
+    // Professor visualiza somente alunos
+    $sql = 'SELECT id, nome, email, tipo, status
+            FROM usuarios
+            WHERE tipo = :tipo
+            ORDER BY nome';
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute(['tipo' => 'aluno']);
+}
+
+// Recuperar os usuários
 $usuarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 ?>
@@ -36,6 +52,7 @@ $usuarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     <div class="page-title">
         <h1>Usuários</h1>
+
         <a class="button" href="form.php">Novo usuário</a>
     </div>
 
@@ -99,5 +116,6 @@ $usuarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
 <?php require_once __DIR__ . '/../../includes/footer.php'; ?>
 
 </body>
+</html>
 </html>
 

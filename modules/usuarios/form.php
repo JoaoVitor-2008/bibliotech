@@ -1,5 +1,6 @@
 
 
+
 <?php
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../database/conexao.php';
@@ -17,12 +18,20 @@ $usuario = [
 
 $mensagem = '';
 
+// Buscar usuário existente
 if ($id) {
     $stmt = $pdo->prepare('SELECT * FROM usuarios WHERE id = :id');
     $stmt->execute(['id' => $id]);
-    $usuario = $stmt->fetch() ?: $usuario;
+    $resultado = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$resultado) {
+        die('Usuário não encontrado.');
+    }
+
+    $usuario = $resultado;
 }
 
+// Processar formulário
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $nome = trim($_POST['nome'] ?? '');
@@ -32,7 +41,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $senha = $_POST['senha'] ?? '';
 
     // Validar campos obrigatórios
-    if (empty($nome) || empty($email) || empty($senha) && !$id) {
+    if (
+        empty($nome) ||
+        empty($email) ||
+        (!$id && empty($senha))
+    ) {
 
         $mensagem = 'Preencha todos os campos obrigatórios.';
 
@@ -50,12 +63,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     } else {
 
-        // Verificar se o e-mail já existe
-        $stmt = $pdo->prepare(
-            'SELECT id FROM usuarios WHERE email = :email'
-        );
+        // Verificar e-mail duplicado, ignorando o próprio usuário
+        $sql = 'SELECT id FROM usuarios WHERE email = :email';
 
-        $stmt->execute(['email' => $email]);
+        if ($id) {
+            $sql .= ' AND id != :id';
+        }
+
+        $stmt = $pdo->prepare($sql);
+
+        $dados = ['email' => $email];
+
+        if ($id) {
+            $dados['id'] = $id;
+        }
+
+        $stmt->execute($dados);
 
         if ($stmt->fetch()) {
 
@@ -63,26 +86,77 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         } else {
 
-            // Proteger a senha
-            $senhaHash = password_hash($senha, PASSWORD_DEFAULT);
+            if ($id) {
 
-            // Cadastrar usuário
-            $sql = 'INSERT INTO usuarios
-                    (nome, email, senha, tipo, status)
-                    VALUES
-                    (:nome, :email, :senha, :tipo, :status)';
+                // Atualizar usuário
+                if (!empty($senha)) {
 
-            $stmt = $pdo->prepare($sql);
+                    $senhaHash = password_hash($senha, PASSWORD_DEFAULT);
 
-            $resultado = $stmt->execute([
-                'nome' => $nome,
-                'email' => $email,
-                'senha' => $senhaHash,
-                'tipo' => $tipo,
-                'status' => $status
-            ]);
+                    $sql = 'UPDATE usuarios SET
+                            nome = :nome,
+                            email = :email,
+                            senha = :senha,
+                            tipo = :tipo,
+                            status = :status
+                            WHERE id = :id';
 
-            if ($resultado) {
+                    $dados = [
+                        'nome' => $nome,
+                        'email' => $email,
+                        'senha' => $senhaHash,
+                        'tipo' => $tipo,
+                        'status' => $status,
+                        'id' => $id
+                    ];
+
+                } else {
+
+                    $sql = 'UPDATE usuarios SET
+                            nome = :nome,
+                            email = :email,
+                            tipo = :tipo,
+                            status = :status
+                            WHERE id = :id';
+
+                    $dados = [
+                        'nome' => $nome,
+                        'email' => $email,
+                        'tipo' => $tipo,
+                        'status' => $status,
+                        'id' => $id
+                    ];
+                }
+
+                $stmt = $pdo->prepare($sql);
+                $stmt->execute($dados);
+
+                $mensagem = 'Usuário atualizado com sucesso!';
+
+                $usuario['nome'] = $nome;
+                $usuario['email'] = $email;
+                $usuario['tipo'] = $tipo;
+                $usuario['status'] = $status;
+
+            } else {
+
+                // Cadastrar novo usuário
+                $senhaHash = password_hash($senha, PASSWORD_DEFAULT);
+
+                $sql = 'INSERT INTO usuarios
+                        (nome, email, senha, tipo, status)
+                        VALUES
+                        (:nome, :email, :senha, :tipo, :status)';
+
+                $stmt = $pdo->prepare($sql);
+
+                $stmt->execute([
+                    'nome' => $nome,
+                    'email' => $email,
+                    'senha' => $senhaHash,
+                    'tipo' => $tipo,
+                    'status' => $status
+                ]);
 
                 $mensagem = 'Usuário cadastrado com sucesso!';
 
@@ -92,15 +166,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'tipo' => 'aluno',
                     'status' => 'ativo'
                 ];
-
-            } else {
-
-                $mensagem = 'Erro ao cadastrar usuário.';
             }
         }
     }
 
-    if (!$id) {
+    // Manter os dados no formulário após erro
+    if (!empty($mensagem) && $mensagem !== 'Usuário cadastrado com sucesso!') {
         $usuario['nome'] = $nome;
         $usuario['email'] = $email;
         $usuario['tipo'] = $tipo;

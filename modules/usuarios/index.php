@@ -1,37 +1,20 @@
 
+
 <?php
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../database/conexao.php';
 
-// Somente administrador e professor podem acessar
-exigirPerfil(['admin', 'professor']);
+exigirPerfil(['admin', 'professor', 'aluno']);
 
-// Verificar o perfil do usuário logado
-if ($_SESSION['tipo'] === 'admin') {
+$sql = 'SELECT id, titulo, autor, ano_publicacao,
+               quantidade_total, quantidade_disponivel
+        FROM livros
+        ORDER BY titulo';
 
-    // Administrador visualiza todos os usuários
-    $sql = 'SELECT id, nome, email, tipo, status
-            FROM usuarios
-            ORDER BY nome';
+$stmt = $pdo->prepare($sql);
+$stmt->execute();
 
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute();
-
-} else {
-
-    // Professor visualiza somente alunos
-    $sql = 'SELECT id, nome, email, tipo, status
-            FROM usuarios
-            WHERE tipo = :tipo
-            ORDER BY nome';
-
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute(['tipo' => 'aluno']);
-}
-
-// Recuperar os usuários
-$usuarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
+$livros = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
 <!DOCTYPE html>
@@ -40,7 +23,7 @@ $usuarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Usuários — BiblioTech</title>
+    <title>Livros — BiblioTech</title>
     <link rel="stylesheet" href="../../assets/css/style.css">
 </head>
 
@@ -51,46 +34,50 @@ $usuarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
 <main class="container">
 
     <div class="page-title">
-        <h1>Usuários</h1>
+        <h1>Livros</h1>
 
-        <a class="button" href="form.php">Novo usuário</a>
+        <?php if (in_array($_SESSION['tipo'], ['admin', 'professor'], true)): ?>
+            <a class="button" href="form.php">Novo livro</a>
+        <?php endif; ?>
     </div>
 
     <div class="card">
 
         <table>
-
             <thead>
                 <tr>
-                    <th>Nome</th>
-                    <th>E-mail</th>
-                    <th>Tipo</th>
-                    <th>Status</th>
+                    <th>Título</th>
+                    <th>Autor</th>
+                    <th>Ano</th>
+                    <th>Quantidade total</th>
+                    <th>Quantidade disponível</th>
+
+                    <?php if (in_array($_SESSION['tipo'], ['admin', 'professor'], true)): ?>
+                        <th>Ações</th>
+                    <?php endif; ?>
                 </tr>
             </thead>
 
             <tbody>
 
-                <?php if (count($usuarios) > 0): ?>
+                <?php if (count($livros) > 0): ?>
 
-                    <?php foreach ($usuarios as $usuario): ?>
+                    <?php foreach ($livros as $livro): ?>
 
                         <tr>
-                            <td>
-                                <?= htmlspecialchars($usuario['nome']) ?>
-                            </td>
+                            <td><?= htmlspecialchars($livro['titulo']) ?></td>
+                            <td><?= htmlspecialchars($livro['autor']) ?></td>
+                            <td><?= htmlspecialchars($livro['ano_publicacao']) ?></td>
+                            <td><?= htmlspecialchars($livro['quantidade_total']) ?></td>
+                            <td><?= htmlspecialchars($livro['quantidade_disponivel']) ?></td>
 
-                            <td>
-                                <?= htmlspecialchars($usuario['email']) ?>
-                            </td>
-
-                            <td>
-                                <?= htmlspecialchars($usuario['tipo']) ?>
-                            </td>
-
-                            <td>
-                                <?= htmlspecialchars($usuario['status']) ?>
-                            </td>
+                            <?php if (in_array($_SESSION['tipo'], ['admin', 'professor'], true)): ?>
+                                <td>
+                                    <a href="form.php?id=<?= $livro['id'] ?>">
+                                        Editar
+                                    </a>
+                                </td>
+                            <?php endif; ?>
                         </tr>
 
                     <?php endforeach; ?>
@@ -98,15 +85,14 @@ $usuarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <?php else: ?>
 
                     <tr>
-                        <td colspan="4">
-                            Nenhum usuário cadastrado.
+                        <td colspan="<?= in_array($_SESSION['tipo'], ['admin', 'professor'], true) ? 6 : 5 ?>">
+                            Nenhum livro cadastrado.
                         </td>
                     </tr>
 
                 <?php endif; ?>
 
             </tbody>
-
         </table>
 
     </div>
@@ -117,5 +103,3 @@ $usuarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 </body>
 </html>
-</html>
-

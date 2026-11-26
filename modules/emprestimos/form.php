@@ -1,4 +1,5 @@
 
+
 <?php
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../database/conexao.php';
@@ -6,6 +7,9 @@ require_once __DIR__ . '/../../database/conexao.php';
 exigirPerfil(['admin', 'professor']);
 
 $mensagem = '';
+$usuario_id = '';
+$livro_id = '';
+$data_devolucao_prevista = '';
 
 // Buscar somente alunos ativos
 $usuarios = $pdo->query(
@@ -37,7 +41,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $data_devolucao_prevista = $_POST['data_devolucao_prevista'] ?? '';
 
-    // Validar os campos
+    // Validar formato da data
     $dataValida = DateTimeImmutable::createFromFormat(
         '!Y-m-d',
         $data_devolucao_prevista
@@ -48,10 +52,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (
         !$dataValida ||
         ($errosData !== false &&
-            ($errosData['warning_count'] > 0 || $errosData['error_count'] > 0)) ||
+            ($errosData['warning_count'] > 0 ||
+             $errosData['error_count'] > 0)) ||
         $dataValida->format('Y-m-d') !== $data_devolucao_prevista
     ) {
         $mensagem = 'Informe uma data de devolução válida.';
+
+    } elseif ($dataValida < new DateTimeImmutable('today')) {
+
+        $mensagem = 'A data de devolução não pode ser anterior à data atual.';
 
     } elseif (
         !$usuario_id || $usuario_id <= 0 ||
@@ -134,13 +143,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->execute(['id' => $livro_id]);
 
             if ($stmt->rowCount() !== 1) {
-                throw new Exception('Não foi possível atualizar a quantidade do livro.');
+                throw new Exception(
+                    'Não foi possível atualizar a quantidade do livro.'
+                );
             }
 
             // Confirmar as duas operações
             $pdo->commit();
 
             $mensagem = 'Empréstimo registrado com sucesso!';
+
+            // Limpar os campos após o sucesso
+            $usuario_id = '';
+            $livro_id = '';
+            $data_devolucao_prevista = '';
 
         } catch (Throwable $erro) {
 
@@ -151,14 +167,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $mensagem = $erro->getMessage();
         }
-
-        // Atualizar a lista de livros após o empréstimo
-        $livros = $pdo->query(
-            "SELECT id, titulo, quantidade_disponivel
-             FROM livros
-             ORDER BY titulo"
-        )->fetchAll(PDO::FETCH_ASSOC);
     }
+
+    // Atualizar a lista de livros após o processamento
+    $livros = $pdo->query(
+        "SELECT id, titulo, quantidade_disponivel
+         FROM livros
+         ORDER BY titulo"
+    )->fetchAll(PDO::FETCH_ASSOC);
 }
 
 require_once __DIR__ . '/../../includes/header.php';
@@ -199,7 +215,7 @@ require_once __DIR__ . '/../../includes/header.php';
 
                     <option
                         value="<?= $usuario['id'] ?>"
-                        <?= (string)($usuario_id ?? '') === (string)$usuario['id'] ? 'selected' : '' ?>
+                        <?= (string)$usuario_id === (string)$usuario['id'] ? 'selected' : '' ?>
                     >
                         <?= htmlspecialchars($usuario['nome']) ?>
                     </option>
@@ -217,7 +233,7 @@ require_once __DIR__ . '/../../includes/header.php';
 
                     <option
                         value="<?= $livro['id'] ?>"
-                        <?= (string)($livro_id ?? '') === (string)$livro['id'] ? 'selected' : '' ?>
+                        <?= (string)$livro_id === (string)$livro['id'] ? 'selected' : '' ?>
                         <?= $livro['quantidade_disponivel'] <= 0 ? 'disabled' : '' ?>
                     >
                         <?= htmlspecialchars($livro['titulo']) ?>
@@ -233,7 +249,8 @@ require_once __DIR__ . '/../../includes/header.php';
             <input
                 type="date"
                 name="data_devolucao_prevista"
-                value="<?= htmlspecialchars($data_devolucao_prevista ?? '') ?>"
+                min="<?= date('Y-m-d') ?>"
+                value="<?= htmlspecialchars($data_devolucao_prevista) ?>"
                 required
             >
 

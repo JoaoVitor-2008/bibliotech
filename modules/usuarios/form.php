@@ -1,37 +1,34 @@
 
-
-
 <?php
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../database/conexao.php';
 
-// Somente administrador e professor podem acessar
+// Somente administrador e professor podem cadastrar ou editar
 exigirPerfil(['admin', 'professor']);
-
-$perfil = $_SESSION['tipo'];
 
 $id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
 
 // Impedir ID inválido
 if (isset($_GET['id']) && (!$id || $id <= 0)) {
-    header('Location: ../../acesso_negado.php');
+    header('Location: index.php');
     exit;
 }
 
-$usuario = [
-    'nome' => '',
-    'email' => '',
-    'tipo' => 'aluno',
-    'status' => 'ativo'
+$livro = [
+    'titulo' => '',
+    'autor' => '',
+    'ano_publicacao' => '',
+    'quantidade_total' => '',
+    'quantidade_disponivel' => ''
 ];
 
 $mensagem = '';
 
-// Buscar usuário existente
+// Buscar livro existente
 if ($id) {
 
     $stmt = $pdo->prepare(
-        'SELECT * FROM usuarios WHERE id = :id'
+        'SELECT * FROM livros WHERE id = :id'
     );
 
     $stmt->execute(['id' => $id]);
@@ -39,177 +36,139 @@ if ($id) {
     $resultado = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$resultado) {
-        die('Usuário não encontrado.');
+        die('Livro não encontrado.');
     }
 
-    // Professor só pode editar alunos
-    if ($perfil === 'professor' && $resultado['tipo'] !== 'aluno') {
-        header('Location: ../../acesso_negado.php');
-        exit;
-    }
-
-    $usuario = $resultado;
+    $livro = $resultado;
 }
 
 // Processar formulário
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
-    $nome = trim($_POST['nome'] ?? '');
-    $email = trim($_POST['email'] ?? '');
+    $titulo = trim($_POST['titulo'] ?? '');
+    $autor = trim($_POST['autor'] ?? '');
 
-    // Professor só pode trabalhar com alunos
-    $tipo = ($perfil === 'professor')
-        ? 'aluno'
-        : ($_POST['tipo'] ?? 'aluno');
+    $ano_publicacao = filter_input(
+        INPUT_POST,
+        'ano_publicacao',
+        FILTER_VALIDATE_INT
+    );
 
-    $status = $_POST['status'] ?? 'ativo';
-    $senha = $_POST['senha'] ?? '';
+    $quantidade_total = filter_input(
+        INPUT_POST,
+        'quantidade_total',
+        FILTER_VALIDATE_INT
+    );
 
-    // Validar campos obrigatórios
+    $quantidade_disponivel = filter_input(
+        INPUT_POST,
+        'quantidade_disponivel',
+        FILTER_VALIDATE_INT
+    );
+
+    // Validar campos
     if (
-        empty($nome) ||
-        empty($email) ||
-        (!$id && empty($senha))
+        $titulo === '' ||
+        $autor === '' ||
+        $ano_publicacao === false ||
+        $ano_publicacao === null ||
+        $ano_publicacao <= 0 ||
+        $quantidade_total === false ||
+        $quantidade_total === null ||
+        $quantidade_total < 0 ||
+        $quantidade_disponivel === false ||
+        $quantidade_disponivel === null ||
+        $quantidade_disponivel < 0
     ) {
 
-        $mensagem = 'Preencha todos os campos obrigatórios.';
+        $mensagem = 'Preencha os campos corretamente.';
 
-    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+    } elseif ($quantidade_disponivel > $quantidade_total) {
 
-        $mensagem = 'Digite um e-mail válido.';
-
-    } elseif (!in_array($tipo, ['aluno', 'professor', 'admin'], true)) {
-
-        $mensagem = 'Tipo de usuário inválido.';
-
-    } elseif (!in_array($status, ['ativo', 'bloqueado'], true)) {
-
-        $mensagem = 'Status inválido.';
+        $mensagem = 'A quantidade disponível não pode ser maior que a quantidade total.';
 
     } else {
 
-        // Verificar se o e-mail já existe
-        $sql = 'SELECT id FROM usuarios WHERE email = :email';
-
         if ($id) {
-            $sql .= ' AND id != :id';
-        }
 
-        $stmt = $pdo->prepare($sql);
+            // UPDATE: editar livro
+            $sql = 'UPDATE livros SET
+                    titulo = :titulo,
+                    autor = :autor,
+                    ano_publicacao = :ano_publicacao,
+                    quantidade_total = :quantidade_total,
+                    quantidade_disponivel = :quantidade_disponivel
+                    WHERE id = :id';
 
-        $dados = ['email' => $email];
+            $stmt = $pdo->prepare($sql);
 
-        if ($id) {
-            $dados['id'] = $id;
-        }
+            $stmt->execute([
+                'titulo' => $titulo,
+                'autor' => $autor,
+                'ano_publicacao' => $ano_publicacao,
+                'quantidade_total' => $quantidade_total,
+                'quantidade_disponivel' => $quantidade_disponivel,
+                'id' => $id
+            ]);
 
-        $stmt->execute($dados);
-
-        if ($stmt->fetch()) {
-
-            $mensagem = 'Este e-mail já está cadastrado.';
+            $mensagem = 'Livro atualizado com sucesso!';
 
         } else {
 
-            if ($id) {
+            // CREATE: cadastrar livro
+            // Disponível começa igual ao total
+            $quantidade_disponivel = $quantidade_total;
 
-                // UPDATE: editar usuário existente
-                if (!empty($senha)) {
+            $sql = 'INSERT INTO livros
+                    (titulo, autor, ano_publicacao,
+                     quantidade_total, quantidade_disponivel)
+                    VALUES
+                    (:titulo, :autor, :ano_publicacao,
+                     :quantidade_total, :quantidade_disponivel)';
 
-                    $senhaHash = password_hash(
-                        $senha,
-                        PASSWORD_DEFAULT
-                    );
+            $stmt = $pdo->prepare($sql);
 
-                    $sql = 'UPDATE usuarios SET
-                            nome = :nome,
-                            email = :email,
-                            senha = :senha,
-                            tipo = :tipo,
-                            status = :status
-                            WHERE id = :id';
+            $stmt->execute([
+                'titulo' => $titulo,
+                'autor' => $autor,
+                'ano_publicacao' => $ano_publicacao,
+                'quantidade_total' => $quantidade_total,
+                'quantidade_disponivel' => $quantidade_disponivel
+            ]);
 
-                    $dados = [
-                        'nome' => $nome,
-                        'email' => $email,
-                        'senha' => $senhaHash,
-                        'tipo' => $tipo,
-                        'status' => $status,
-                        'id' => $id
-                    ];
+            $mensagem = 'Livro cadastrado com sucesso!';
 
-                } else {
+            $livro = [
+                'titulo' => '',
+                'autor' => '',
+                'ano_publicacao' => '',
+                'quantidade_total' => '',
+                'quantidade_disponivel' => ''
+            ];
+        }
 
-                    $sql = 'UPDATE usuarios SET
-                            nome = :nome,
-                            email = :email,
-                            tipo = :tipo,
-                            status = :status
-                            WHERE id = :id';
-
-                    $dados = [
-                        'nome' => $nome,
-                        'email' => $email,
-                        'tipo' => $tipo,
-                        'status' => $status,
-                        'id' => $id
-                    ];
-                }
-
-                $stmt = $pdo->prepare($sql);
-                $stmt->execute($dados);
-
-                $mensagem = 'Usuário atualizado com sucesso!';
-
-                $usuario['nome'] = $nome;
-                $usuario['email'] = $email;
-                $usuario['tipo'] = $tipo;
-                $usuario['status'] = $status;
-
-            } else {
-
-                // CREATE: cadastrar novo usuário
-                $senhaHash = password_hash(
-                    $senha,
-                    PASSWORD_DEFAULT
-                );
-
-                $sql = 'INSERT INTO usuarios
-                        (nome, email, senha, tipo, status)
-                        VALUES
-                        (:nome, :email, :senha, :tipo, :status)';
-
-                $stmt = $pdo->prepare($sql);
-
-                $stmt->execute([
-                    'nome' => $nome,
-                    'email' => $email,
-                    'senha' => $senhaHash,
-                    'tipo' => $tipo,
-                    'status' => $status
-                ]);
-
-                $mensagem = 'Usuário cadastrado com sucesso!';
-
-                $usuario = [
-                    'nome' => '',
-                    'email' => '',
-                    'tipo' => 'aluno',
-                    'status' => 'ativo'
-                ];
-            }
+        if ($id) {
+            $livro = [
+                'titulo' => $titulo,
+                'autor' => $autor,
+                'ano_publicacao' => $ano_publicacao,
+                'quantidade_total' => $quantidade_total,
+                'quantidade_disponivel' => $quantidade_disponivel
+            ];
         }
     }
 
-    // Manter dados preenchidos quando houver erro
-    if (
-        $mensagem !== '' &&
-        $mensagem !== 'Usuário cadastrado com sucesso!'
-    ) {
-        $usuario['nome'] = $nome;
-        $usuario['email'] = $email;
-        $usuario['tipo'] = $tipo;
-        $usuario['status'] = $status;
+    // Manter os dados preenchidos quando houver erro
+    if ($mensagem === 'Preencha os campos corretamente.' ||
+        $mensagem === 'A quantidade disponível não pode ser maior que a quantidade total.') {
+
+        $livro = [
+            'titulo' => $titulo,
+            'autor' => $autor,
+            'ano_publicacao' => $_POST['ano_publicacao'] ?? '',
+            'quantidade_total' => $_POST['quantidade_total'] ?? '',
+            'quantidade_disponivel' => $_POST['quantidade_disponivel'] ?? ''
+        ];
     }
 }
 ?>
@@ -220,7 +179,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= $id ? 'Editar' : 'Novo' ?> usuário</title>
+    <title><?= $id ? 'Editar' : 'Novo' ?> livro</title>
     <link rel="stylesheet" href="../../assets/css/style.css">
 </head>
 
@@ -232,9 +191,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     <div class="card">
 
-        <h1><?= $id ? 'Editar usuário' : 'Novo usuário' ?></h1>
+        <h1><?= $id ? 'Editar livro' : 'Novo livro' ?></h1>
 
-        <?php if (!empty($mensagem)): ?>
+        <?php if ($mensagem !== ''): ?>
             <div class="alert">
                 <?= htmlspecialchars($mensagem) ?>
             </div>
@@ -242,82 +201,60 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <form method="post">
 
-            <label>Nome</label>
+            <label>Título</label>
             <input
                 type="text"
-                name="nome"
-                value="<?= htmlspecialchars($usuario['nome']) ?>"
+                name="titulo"
+                value="<?= htmlspecialchars($livro['titulo']) ?>"
                 required
             >
 
-            <label>E-mail</label>
+            <label>Autor</label>
             <input
-                type="email"
-                name="email"
-                value="<?= htmlspecialchars($usuario['email']) ?>"
+                type="text"
+                name="autor"
+                value="<?= htmlspecialchars($livro['autor']) ?>"
                 required
             >
 
-            <label>
-                Senha
-                <?= $id ? '(deixe vazia para não alterar)' : '' ?>
-            </label>
-
+            <label>Ano de publicação</label>
             <input
-                type="password"
-                name="senha"
-                <?= $id ? '' : 'required' ?>
+                type="number"
+                name="ano_publicacao"
+                min="1"
+                value="<?= htmlspecialchars($livro['ano_publicacao']) ?>"
+                required
             >
 
-            <label>Tipo</label>
+            <label>Quantidade total</label>
+            <input
+                type="number"
+                name="quantidade_total"
+                min="0"
+                value="<?= htmlspecialchars($livro['quantidade_total']) ?>"
+                required
+            >
 
-            <?php if ($perfil === 'admin'): ?>
+            <?php if ($id): ?>
 
-                <select name="tipo">
-
-                    <option value="aluno"
-                        <?= $usuario['tipo'] === 'aluno' ? 'selected' : '' ?>>
-                        Aluno
-                    </option>
-
-                    <option value="professor"
-                        <?= $usuario['tipo'] === 'professor' ? 'selected' : '' ?>>
-                        Professor
-                    </option>
-
-                    <option value="admin"
-                        <?= $usuario['tipo'] === 'admin' ? 'selected' : '' ?>>
-                        Administrador
-                    </option>
-
-                </select>
-
-            <?php else: ?>
-
-                <input type="hidden" name="tipo" value="aluno">
-                <input type="text" value="Aluno" disabled>
+                <label>Quantidade disponível</label>
+                <input
+                    type="number"
+                    name="quantidade_disponivel"
+                    min="0"
+                    value="<?= htmlspecialchars($livro['quantidade_disponivel']) ?>"
+                    required
+                >
 
             <?php endif; ?>
-
-            <label>Status</label>
-
-            <select name="status">
-
-                <option value="ativo"
-                    <?= $usuario['status'] === 'ativo' ? 'selected' : '' ?>>
-                    Ativo
-                </option>
-
-                <option value="bloqueado"
-                    <?= $usuario['status'] === 'bloqueado' ? 'selected' : '' ?>>
-                    Bloqueado
-                </option>
-
-            </select>
 
             <button type="submit">Salvar</button>
 
         </form>
+
+        <p>
+            <a href="index.php">Voltar para livros</a>
+        </p>
 
     </div>
 
@@ -327,4 +264,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 </body>
 </html>
+
+
+
 

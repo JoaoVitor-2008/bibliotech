@@ -1,20 +1,27 @@
 
-
-
 <?php
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../database/conexao.php';
 
 exigirPerfil(['admin', 'professor']);
 
-// Consultar usuários cadastrados
-$sql = 'SELECT id, nome, email, tipo, status
-        FROM usuarios
-        ORDER BY nome';
+// Consultar usuários conforme o perfil
+if ($_SESSION['tipo'] === 'professor') {
+    $stmt = $pdo->prepare(
+        "SELECT id, nome, email, tipo, status
+         FROM usuarios
+         WHERE tipo = 'aluno'
+         ORDER BY nome"
+    );
+} else {
+    $stmt = $pdo->prepare(
+        "SELECT id, nome, email, tipo, status
+         FROM usuarios
+         ORDER BY nome"
+    );
+}
 
-$stmt = $pdo->prepare($sql);
 $stmt->execute();
-
 $usuarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
@@ -35,7 +42,9 @@ $usuarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
 <main class="container">
 
     <div class="page-title">
-        <h1>Usuários</h1>
+        <h1>
+            <?= $_SESSION['tipo'] === 'professor' ? 'Alunos' : 'Usuários' ?>
+        </h1>
 
         <a class="button" href="form.php">Novo usuário</a>
     </div>
@@ -49,6 +58,7 @@ $usuarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     <th>E-mail</th>
                     <th>Tipo</th>
                     <th>Status</th>
+                    <th>Ações</th>
                 </tr>
             </thead>
 
@@ -74,6 +84,12 @@ $usuarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             <td>
                                 <?= htmlspecialchars($usuario['status']) ?>
                             </td>
+
+                            <td>
+                                <a href="form.php?id=<?= (int) $usuario['id'] ?>">
+                                    Editar
+                                </a>
+                            </td>
                         </tr>
 
                     <?php endforeach; ?>
@@ -81,7 +97,7 @@ $usuarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <?php else: ?>
 
                     <tr>
-                        <td colspan="4">
+                        <td colspan="5">
                             Nenhum usuário cadastrado.
                         </td>
                     </tr>
